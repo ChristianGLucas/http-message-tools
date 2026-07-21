@@ -100,6 +100,36 @@ func TestBuildRequest_HeaderInjectionRejected(t *testing.T) {
 	}
 }
 
+// TestBuildRequest_MismatchedContentLengthRejected is the killing
+// regression test for a CRITICAL an independent adversarial review found:
+// http.ReadRequest only parses the start-line/headers eagerly and leaves
+// the body as a lazily-read io.ReadCloser, so an earlier version of the
+// self-validate step (which called ReadRequest but never read the body)
+// let a Content-Length that does not match the actual body length through
+// as ok=true — even though the package's OWN ParseRequest would reject the
+// exact same bytes with a body-read error. A realistic caller-supplied
+// mismatch (e.g. a hand-typed or stale Content-Length) must be rejected.
+func TestBuildRequest_MismatchedContentLengthRejected(t *testing.T) {
+	ctx := context.Background()
+	ax := newTestContext(t)
+
+	got, err := nodes.BuildRequest(ctx, ax, &gen.BuildRequestInput{
+		Method:  "POST",
+		Target:  "/",
+		Headers: []*gen.HttpHeader{{Name: "Content-Length", Value: "100"}},
+		Body:    []byte("hi"), // only 2 bytes, not 100
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Ok {
+		t.Fatalf("expected ok=false for a Content-Length that does not match the actual body length, got %+v", got)
+	}
+	if got.Error == "" {
+		t.Errorf("expected a structured error message, got empty string")
+	}
+}
+
 func TestBuildRequest_InvalidHeaderNameRejected(t *testing.T) {
 	ctx := context.Background()
 	ax := newTestContext(t)

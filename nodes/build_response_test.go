@@ -113,6 +113,26 @@ func TestBuildResponse_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestBuildResponse_MismatchedContentLengthRejected is the response-side
+// twin of the killing regression test in build_request_test.go — see that
+// test's comment for the CRITICAL it guards against.
+func TestBuildResponse_MismatchedContentLengthRejected(t *testing.T) {
+	ctx := context.Background()
+	ax := newTestContext(t)
+
+	got, err := nodes.BuildResponse(ctx, ax, &gen.BuildResponseInput{
+		StatusCode: 200,
+		Headers:    []*gen.HttpHeader{{Name: "Content-Length", Value: "100"}},
+		Body:       []byte("hi"), // only 2 bytes, not 100
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Ok {
+		t.Fatalf("expected ok=false for a Content-Length that does not match the actual body length, got %+v", got)
+	}
+}
+
 func TestBuildResponse_HeaderInjectionRejected(t *testing.T) {
 	ctx := context.Background()
 	ax := newTestContext(t)

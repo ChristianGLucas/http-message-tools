@@ -64,8 +64,18 @@ func BuildResponse(ctx context.Context, ax axiom.Context, input *gen.BuildRespon
 	}
 
 	// Self-validate: never hand back bytes our own parser would reject.
-	if _, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(data)), nil); err != nil {
+	// Reading the body (not just the start-line/headers) matters here: a
+	// caller-supplied Content-Length that does not match the actual body
+	// length (or a Transfer-Encoding: chunked header on a body that isn't
+	// actually chunk-encoded) would otherwise slip through undetected,
+	// since http.ReadResponse returns before its lazily-read Body is
+	// consumed.
+	reResp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(data)), nil)
+	if err != nil {
 		return &gen.BuildResponseOutput{Error: "assembled message failed to re-parse: " + err.Error()}, nil
+	}
+	if _, _, err := readBodyBounded(reResp.Body, maxInputBytes); err != nil {
+		return &gen.BuildResponseOutput{Error: "assembled message's body failed to re-parse (likely a Content-Length/Transfer-Encoding mismatch): " + err.Error()}, nil
 	}
 
 	return &gen.BuildResponseOutput{Ok: true, Data: data}, nil
