@@ -1,0 +1,186 @@
+name: christiangeorgelucas/http-message-tools
+version: 0.1.0
+language: go
+author: Christian George Lucas
+license: MIT
+description: >-
+  Composable nodes for deterministic parsing and building of raw HTTP/1.x
+  request and response MESSAGES in their wire text form — the
+  application-layer message format, distinct from packet-tools (raw
+  network/transport packet decoding), url-tools (URL parsing), mime-tools
+  (media-type headers), useragent-tools (the User-Agent header), and
+  email-tools (RFC822/MIME email). Wraps Go's standard library (net/http,
+  net/http/httputil, net/textproto) with zero third-party dependency — the
+  same RFC 7230/9110 grammar, Content-Length/chunked transfer decoding, and
+  cookie parsing net/http itself uses — plus thin, order-preserving glue
+  where net/http's own map-based Header type would otherwise silently
+  discard wire order and where net/http accepts a Content-Length +
+  Transfer-Encoding combination it silently resolves rather than flags (a
+  classic request-smuggling ambiguity this package rejects explicitly).
+  Every node is a pure, deterministic single-input to single-output
+  transform: no network calls, no sockets, no wall-clock, no randomness.
+  Input is bounded to 4 MiB (the Axiom node transport ceiling), header
+  count is capped, and chunked-body decoding output is capped regardless
+  of a declared chunk size.
+tags:
+    - http
+    - http-message
+    - request
+    - response
+    - headers
+    - cookies
+    - chunked-encoding
+    - rfc7230
+    - rfc9110
+    - wire-format
+nodes:
+    - name: ParseRequest
+      input: ParseRequestInput
+      output: ParseRequestOutput
+      description: >-
+        Parse a raw HTTP/1.x request message (request-line, headers, body)
+        into structured form: method, request-target, HTTP version, headers
+        (wire order and repeats preserved), and body. Delegates the
+        request-line grammar and Content-Length/chunked body decoding to
+        net/http.ReadRequest, and separately re-scans the header block to
+        recover wire order, which net/http's map-based Header type
+        discards. Rejects a message with both Content-Length and
+        Transfer-Encoding present (a request-smuggling ambiguity net/http
+        itself resolves silently rather than flagging) with a structured
+        error, and bounds input to 4 MiB.
+    - name: ParseResponse
+      input: ParseResponseInput
+      output: ParseResponseOutput
+      description: >-
+        Parse a raw HTTP/1.x response message (status-line, headers, body)
+        into structured form: HTTP version, status code, reason phrase,
+        headers (wire order and repeats preserved, e.g. multiple
+        Set-Cookie), and body. Delegates the status-line grammar and body
+        decoding to net/http.ReadResponse. Set request_method="HEAD" when
+        the response answers a HEAD request, since a HEAD response's
+        Content-Length describes a body that is not actually present on the
+        wire — RFC 7230 leaves that ambiguous without knowing the request
+        method. Rejects a Content-Length + Transfer-Encoding combination and
+        bounds input to 4 MiB.
+    - name: ParseMessage
+      input: ParseMessageInput
+      output: ParseMessageOutput
+      description: >-
+        Parse a raw HTTP/1.x message of UNKNOWN kind: inspects the first
+        line (a status-line always starts with "HTTP/") to decide whether
+        to apply request or response parsing, then returns the same
+        structured fields as ParseRequest/ParseResponse with is_request
+        marking which. Useful when a caller has captured message text
+        without knowing in advance which side of the exchange it is.
+    - name: ParseRequestLine
+      input: ParseRequestLineInput
+      output: ParseRequestLineOutput
+      description: >-
+        Parse a bare request-line, e.g. "GET /path?q=1 HTTP/1.1", into its
+        method, request-target, and HTTP version. Reuses
+        net/http.ReadRequest for the actual grammar by synthesizing a
+        minimal complete request (the line plus an empty header block)
+        rather than hand-splitting on spaces, so it rejects the same
+        malformed input ParseRequest would. Rejects a line containing an
+        embedded CR or LF.
+    - name: ParseStatusLine
+      input: ParseStatusLineInput
+      output: ParseStatusLineOutput
+      description: >-
+        Parse a bare status-line, e.g. "HTTP/1.1 404 Not Found", into its
+        HTTP version, status code, and reason phrase. Reuses
+        net/http.ReadResponse for the actual grammar by synthesizing a
+        minimal complete response, so multi-word reason phrases and
+        malformed lines are handled exactly as ParseResponse would.
+    - name: ParseHeaderBlock
+      input: ParseHeaderBlockInput
+      output: ParseHeaderBlockOutput
+      description: >-
+        Parse a raw header block (zero or more "Name: value" lines, no
+        leading request-line/status-line) into a structured, order-
+        preserving list. Repeated headers of the same name appear as
+        separate entries in wire order, and RFC 7230 obsolete line-folding
+        (a continuation line beginning with a space or tab) is honored via
+        net/textproto's continued-line reader, joined with a single space.
+    - name: GetHeader
+      input: GetHeaderInput
+      output: GetHeaderOutput
+      description: >-
+        Extract a single named header's value(s), case-insensitively, from
+        either a bare header block or a complete HTTP message (a leading
+        request-line/status-line, if present, is detected and skipped).
+        Returns every occurrence in wire order (useful for a repeated
+        header like Set-Cookie) in values, plus first_value as a
+        plain-scalar convenience for composing into a downstream node's
+        scalar input field across a flow edge — e.g. into
+        ParseCookieHeader.value or ParseSetCookie.value.
+    - name: DechunkBody
+      input: DechunkBodyInput
+      output: DechunkBodyOutput
+      description: >-
+        Decode a Transfer-Encoding: chunked message body into its dechunked
+        bytes, via net/http/httputil.NewChunkedReader — the same decoder
+        net/http itself uses to transparently dechunk a response body.
+        Output is bounded to max_output_bytes (default and hard maximum 4
+        MiB): a chunk-size line can declare an arbitrarily large chunk, but
+        decoding reads incrementally and stops the moment the cap is
+        reached, so a hostile declared size never drives a large
+        allocation. truncated=true when the cap was hit before the
+        terminating chunk.
+    - name: ParseCookieHeader
+      input: ParseCookieHeaderInput
+      output: ParseCookieHeaderOutput
+      description: >-
+        Parse the raw value of a request's Cookie header (e.g. "a=1; b=2")
+        into name/value pairs, via net/http.Request.Cookies() — the same
+        RFC 6265 cookie-string parser net/http itself uses to expose
+        r.Cookies() on an incoming server request.
+    - name: ParseSetCookie
+      input: ParseSetCookieInput
+      output: ParseSetCookieOutput
+      description: >-
+        Parse the raw value of a single response Set-Cookie header into its
+        structured attributes — name, value, Domain, Path, Expires (HTTP-
+        date formatted per RFC 9110, using net/http's own GMT-suffixed
+        TimeFormat constant), Max-Age, Secure, HttpOnly, and SameSite — via
+        net/http.ParseSetCookie. Call once per Set-Cookie occurrence when a
+        response has several (use ParseResponse or GetHeader to obtain each
+        occurrence first). has_max_age is false when Max-Age was absent
+        (Go's own convention: a literal "Max-Age=0" is indistinguishable
+        from no Max-Age attribute).
+    - name: BuildRequest
+      input: BuildRequestInput
+      output: BuildRequestOutput
+      description: >-
+        Build a raw HTTP/1.x request message from structured components —
+        the inverse of ParseRequest. Every header name/value, the method,
+        and the target are validated against RFC 7230's token/field-content
+        grammar before assembly, rejecting anything containing a CR or LF
+        (which would otherwise let a caller inject extra headers or a
+        second message into the output — classic CRLF/header injection).
+        The assembled bytes are re-parsed with net/http.ReadRequest before
+        being returned, so this node never emits a message its own
+        ParseRequest would reject. version defaults to "HTTP/1.1"; target
+        defaults to "/".
+    - name: BuildResponse
+      input: BuildResponseInput
+      output: BuildResponseOutput
+      description: >-
+        Build a raw HTTP/1.x response message from structured components —
+        the inverse of ParseResponse. reason defaults to the standard RFC
+        9110 reason phrase for status_code (via net/http.StatusText) when
+        empty; a nonstandard code with no table entry and no explicit
+        reason is rejected. Headers are validated against RFC 7230's
+        token/field-content grammar, and the assembled bytes are re-parsed
+        with net/http.ReadResponse before being returned, so this node
+        never emits a message its own ParseResponse would reject. version
+        defaults to "HTTP/1.1".
+    - name: SplitRequestTarget
+      input: SplitRequestTargetInput
+      output: SplitRequestTargetOutput
+      description: >-
+        Split a request-target (e.g. "/search?q=go+http") into its path and
+        raw query string, on the first '?'. Deliberately minimal — the
+        query string itself is returned undecoded; hand it to url-tools if
+        you need it parsed into key/value pairs (its UrlComponents.query
+        field uses the same plain-string convention).

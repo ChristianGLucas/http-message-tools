@@ -1,0 +1,279 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.http_message_tools;
+
+option go_package = ".;gen";
+
+// A single HTTP header field as it appeared on the wire: the field name
+// (case as written, not lower-cased) and its trimmed value. Repeated
+// headers of the same name appear as separate entries, in wire order.
+message HttpHeader {
+  string name = 1;
+  string value = 2;
+}
+
+// Raw bytes of a complete HTTP/1.x request message: request-line, header
+// block, and body, exactly as it appears on the wire (CRLF or LF line
+// endings both accepted).
+message ParseRequestInput {
+  bytes data = 1;
+  // Optional cap on the decoded body size in bytes. 0 (default) uses the
+  // package default of 4 MiB, which is also the hard input-size ceiling.
+  int32 max_body_bytes = 2;
+}
+
+message ParseRequestOutput {
+  // False iff a structured error prevented parsing; check error first.
+  bool ok = 1;
+  string error = 2;
+  string method = 3;
+  // The request-target exactly as written (origin-form, absolute-form,
+  // authority-form, or asterisk-form) — not decoded or normalized.
+  string target = 4;
+  // The HTTP version token, e.g. "HTTP/1.1".
+  string version = 5;
+  // Headers in original wire order, with repeats preserved as separate entries.
+  repeated HttpHeader headers = 6;
+  bytes body = 7;
+  // True when the body was cut off at max_body_bytes rather than fully read.
+  bool body_truncated = 8;
+}
+
+// Raw bytes of a complete HTTP/1.x response message: status-line, header
+// block, and body.
+message ParseResponseInput {
+  bytes data = 1;
+  int32 max_body_bytes = 2;
+  // Optional: the HTTP method of the REQUEST this response answers, e.g.
+  // "HEAD". Required to correctly interpret a HEAD response's Content-Length
+  // (no body bytes follow even though Content-Length is set) — RFC 7230
+  // leaves this ambiguous without knowing the request method. Leave empty
+  // if unknown; the response is then interpreted as answering a GET.
+  string request_method = 3;
+}
+
+message ParseResponseOutput {
+  bool ok = 1;
+  string error = 2;
+  string version = 3;
+  int32 status_code = 4;
+  string reason = 5;
+  repeated HttpHeader headers = 6;
+  bytes body = 7;
+  bool body_truncated = 8;
+}
+
+// Raw bytes of a complete HTTP/1.x message of UNKNOWN kind — the first
+// line is inspected to decide request vs. response.
+message ParseMessageInput {
+  bytes data = 1;
+  int32 max_body_bytes = 2;
+  // See ParseResponseInput.request_method; only used if the message turns
+  // out to be a response.
+  string request_method = 3;
+}
+
+message ParseMessageOutput {
+  bool ok = 1;
+  string error = 2;
+  // True if the first line was a request-line; false if it was a status-line.
+  bool is_request = 3;
+  // Request fields (set only when is_request is true).
+  string method = 4;
+  string target = 5;
+  // Response fields (set only when is_request is false).
+  int32 status_code = 6;
+  string reason = 7;
+  // Common to both.
+  string version = 8;
+  repeated HttpHeader headers = 9;
+  bytes body = 10;
+  bool body_truncated = 11;
+}
+
+// A bare request-line, e.g. "GET /path?q=1 HTTP/1.1" — no trailing CRLF,
+// no headers, no embedded newlines.
+message ParseRequestLineInput {
+  string line = 1;
+}
+
+message ParseRequestLineOutput {
+  bool ok = 1;
+  string error = 2;
+  string method = 3;
+  string target = 4;
+  string version = 5;
+}
+
+// A bare status-line, e.g. "HTTP/1.1 404 Not Found" — no trailing CRLF,
+// no headers, no embedded newlines.
+message ParseStatusLineInput {
+  string line = 1;
+}
+
+message ParseStatusLineOutput {
+  bool ok = 1;
+  string error = 2;
+  string version = 3;
+  int32 status_code = 4;
+  string reason = 5;
+}
+
+// A raw header block: zero or more "Name: value" lines (obsolete
+// line-folding is honored), WITHOUT a leading request-line/status-line.
+// A trailing blank line is optional.
+message ParseHeaderBlockInput {
+  bytes data = 1;
+}
+
+message ParseHeaderBlockOutput {
+  bool ok = 1;
+  string error = 2;
+  repeated HttpHeader headers = 3;
+}
+
+// Look up one named header's value(s), case-insensitively. Accepts either
+// a bare header block (see ParseHeaderBlockInput) or a complete message —
+// a leading request-line/status-line, if present, is detected and skipped.
+message GetHeaderInput {
+  bytes data = 1;
+  string name = 2;
+}
+
+message GetHeaderOutput {
+  bool ok = 1;
+  string error = 2;
+  bool found = 3;
+  // Every occurrence of the header, in wire order (a repeated header, e.g.
+  // Set-Cookie, appears more than once here).
+  repeated string values = 4;
+  // Convenience copy of values[0] as a plain scalar, for composing into a
+  // downstream node's scalar input field across a flow edge. Empty if not found.
+  string first_value = 5;
+}
+
+// A Transfer-Encoding: chunked message body, encoded exactly as it appears
+// on the wire (chunk-size lines, chunk data, and the terminating 0-size chunk).
+message DechunkBodyInput {
+  bytes data = 1;
+  // Cap on the decoded output size in bytes. 0 (default) uses the package
+  // default of 4 MiB.
+  int32 max_output_bytes = 2;
+}
+
+message DechunkBodyOutput {
+  bool ok = 1;
+  string error = 2;
+  bytes data = 3;
+  // True when decoding stopped at max_output_bytes rather than reaching the
+  // terminating chunk.
+  bool truncated = 4;
+}
+
+// The raw value of a request's Cookie header, e.g. `a=1; b=2; c=3`.
+message ParseCookieHeaderInput {
+  string value = 1;
+}
+
+message CookiePair {
+  string name = 1;
+  string value = 2;
+}
+
+message ParseCookieHeaderOutput {
+  bool ok = 1;
+  string error = 2;
+  repeated CookiePair cookies = 3;
+}
+
+// The raw value of a single response Set-Cookie header (one cookie's worth —
+// call once per Set-Cookie occurrence when a response has several).
+message ParseSetCookieInput {
+  string value = 1;
+}
+
+message ParseSetCookieOutput {
+  bool ok = 1;
+  string error = 2;
+  string name = 3;
+  string value = 4;
+  string domain = 5;
+  string path = 6;
+  // HTTP-date formatted per RFC 9110 SS5.6.7 (IMF-fixdate), e.g.
+  // "Mon, 02 Jan 2006 15:04:05 GMT". Empty if unset.
+  string expires = 7;
+  int64 max_age = 8;
+  // False when Max-Age was absent from the cookie (Go's own convention: a
+  // literal "Max-Age=0" is indistinguishable from "no Max-Age attribute").
+  bool has_max_age = 9;
+  bool secure = 10;
+  bool http_only = 11;
+  // "Strict", "Lax", "None", or "" if unset/not recognized.
+  string same_site = 12;
+}
+
+// Structural components of a request message to serialize to wire text.
+message BuildRequestInput {
+  string method = 1;
+  string target = 2;
+  // Defaults to "HTTP/1.1" if empty.
+  string version = 3;
+  repeated HttpHeader headers = 4;
+  bytes body = 5;
+}
+
+message BuildRequestOutput {
+  bool ok = 1;
+  string error = 2;
+  bytes data = 3;
+}
+
+// Structural components of a response message to serialize to wire text.
+message BuildResponseInput {
+  // Defaults to "HTTP/1.1" if empty.
+  string version = 1;
+  int32 status_code = 2;
+  // If empty, derived from status_code via the standard reason phrase
+  // table (e.g. 404 -> "Not Found"); a nonstandard code with no entry in
+  // the table is rejected unless reason is supplied explicitly.
+  string reason = 3;
+  repeated HttpHeader headers = 4;
+  bytes body = 5;
+}
+
+message BuildResponseOutput {
+  bool ok = 1;
+  string error = 2;
+  bytes data = 3;
+}
+
+// A request-target as it appears in a request-line, e.g. "/search?q=go+http".
+message SplitRequestTargetInput {
+  string target = 1;
+}
+
+message SplitRequestTargetOutput {
+  bool ok = 1;
+  string error = 2;
+  string path = 3;
+  // Everything after the first '?', or "" if there was none. Not decoded —
+  // hand raw to url-tools if you need it parsed into key/value pairs.
+  string query = 4;
+}
