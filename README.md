@@ -1,6 +1,6 @@
 # http-message-tools
 
-Composable [Axiom](https://axiom.co) nodes for deterministic parsing and building of raw
+Composable [Axiom](https://axiomide.com) nodes for deterministic parsing and building of raw
 **HTTP/1.x request and response messages** in their wire text form — the application-layer
 HTTP message format. Distinct from `packet-tools` (raw network/transport packet decoding),
 `url-tools` (URL parsing), `mime-tools` (media-type headers), `useragent-tools` (the
