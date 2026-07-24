@@ -14,15 +14,13 @@ import (
 	gen "christiangeorgelucas/http-message-tools/gen"
 )
 
-// Package-wide bounds. The Axiom node transport caps a single message
-// around 4 MiB; these bounds are set at that ceiling so a message the
-// transport would accept never blows an internal buffer, and anything
-// larger is rejected deterministically before any parsing work happens.
+// Payload size, header count, and line-length limits are enforced by the
+// Axiom platform (ingress, transport, and sandboxed execution) — this
+// package does not impose its own. defaultMaxBody is not a rejection bound;
+// it's just the default (and ceiling) clampMaxBody/clampMaxOutput apply when
+// a caller doesn't specify how many body bytes they want read.
 const (
-	maxInputBytes  = 4 << 20 // 4 MiB
 	defaultMaxBody = 4 << 20 // 4 MiB
-	maxHeaderCount = 500     // no legitimate HTTP/1.x message needs more
-	maxLineBytes   = 8192    // bound on a bare request-line/status-line/header-name input
 )
 
 var httpVersionRe = regexp.MustCompile(`^HTTP/[0-9]\.[0-9]$`)
@@ -85,9 +83,6 @@ func scanOrderedHeaders(data []byte) ([]header, error) {
 			return hs, fmt.Errorf("malformed header line %q: empty name", string(lineBytes))
 		}
 		hs = append(hs, header{name: name, value: value})
-		if len(hs) > maxHeaderCount {
-			return nil, fmt.Errorf("too many headers (max %d)", maxHeaderCount)
-		}
 	}
 	return hs, nil
 }

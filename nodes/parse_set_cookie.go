@@ -17,10 +17,6 @@ func ParseSetCookie(ctx context.Context, ax axiom.Context, input *gen.ParseSetCo
 	if input == nil || input.Value == "" {
 		return &gen.ParseSetCookieOutput{Error: "value is required"}, nil
 	}
-	if len(input.Value) > maxLineBytes {
-		return &gen.ParseSetCookieOutput{Error: "value exceeds the 8192 byte limit"}, nil
-	}
-
 	c, err := http.ParseSetCookie(input.Value)
 	if err != nil {
 		return &gen.ParseSetCookieOutput{Error: "parse error: " + err.Error()}, nil

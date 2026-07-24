@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 
 	"christiangeorgelucas/http-message-tools/axiom"
@@ -39,9 +40,6 @@ func BuildRequest(ctx context.Context, ax axiom.Context, input *gen.BuildRequest
 	if err := validateHeadersForBuild(input.Headers); err != nil {
 		return &gen.BuildRequestOutput{Error: err.Error()}, nil
 	}
-	if len(input.Body) > maxInputBytes {
-		return &gen.BuildRequestOutput{Error: "body exceeds the 4 MiB size limit"}, nil
-	}
 
 	var buf bytes.Buffer
 	buf.WriteString(input.Method)
@@ -55,9 +53,6 @@ func BuildRequest(ctx context.Context, ax axiom.Context, input *gen.BuildRequest
 	buf.Write(input.Body)
 
 	data := buf.Bytes()
-	if len(data) > maxInputBytes {
-		return &gen.BuildRequestOutput{Error: "assembled message exceeds the 4 MiB size limit"}, nil
-	}
 
 	// Self-validate: never hand back bytes our own parser would reject.
 	// Reading the body (not just the start-line/headers) matters here: a
@@ -70,7 +65,7 @@ func BuildRequest(ctx context.Context, ax axiom.Context, input *gen.BuildRequest
 	if err != nil {
 		return &gen.BuildRequestOutput{Error: "assembled message failed to re-parse: " + err.Error()}, nil
 	}
-	if _, _, err := readBodyBounded(reReq.Body, maxInputBytes); err != nil {
+	if _, err := io.ReadAll(reReq.Body); err != nil {
 		return &gen.BuildRequestOutput{Error: "assembled message's body failed to re-parse (likely a Content-Length/Transfer-Encoding mismatch): " + err.Error()}, nil
 	}
 

@@ -17,15 +17,11 @@ import (
 // map-based Header type does not retain. Rejects a message with both
 // Content-Length and Transfer-Encoding present (a request-smuggling
 // ambiguity net/http silently resolves by dropping both headers rather than
-// flagging) and bounds total input to 4 MiB.
+// flagging).
 func ParseRequest(ctx context.Context, ax axiom.Context, input *gen.ParseRequestInput) (*gen.ParseRequestOutput, error) {
 	if input == nil || len(input.Data) == 0 {
 		return &gen.ParseRequestOutput{Error: "data is required"}, nil
 	}
-	if len(input.Data) > maxInputBytes {
-		return &gen.ParseRequestOutput{Error: "input exceeds the 4 MiB size limit"}, nil
-	}
-
 	_, rest, ok := splitStartLine(input.Data)
 	if !ok {
 		return &gen.ParseRequestOutput{Error: "no line terminator found; not a valid HTTP message"}, nil

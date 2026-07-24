@@ -18,10 +18,6 @@ func GetHeader(ctx context.Context, ax axiom.Context, input *gen.GetHeaderInput)
 	if input == nil || input.Name == "" {
 		return &gen.GetHeaderOutput{Error: "name is required"}, nil
 	}
-	if len(input.Data) > maxInputBytes {
-		return &gen.GetHeaderOutput{Error: "input exceeds the 4 MiB size limit"}, nil
-	}
-
 	hs, err := scanHeadersFlexible(input.Data)
 	if err != nil {
 		return &gen.GetHeaderOutput{Error: err.Error()}, nil

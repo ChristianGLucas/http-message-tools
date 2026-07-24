@@ -16,10 +16,6 @@ func ParseCookieHeader(ctx context.Context, ax axiom.Context, input *gen.ParseCo
 	if input == nil || input.Value == "" {
 		return &gen.ParseCookieHeaderOutput{Error: "value is required"}, nil
 	}
-	if len(input.Value) > maxLineBytes {
-		return &gen.ParseCookieHeaderOutput{Error: "value exceeds the 8192 byte limit"}, nil
-	}
-
 	req := &http.Request{Header: http.Header{"Cookie": []string{input.Value}}}
 	cookies := req.Cookies()
 

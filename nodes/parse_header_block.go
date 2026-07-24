@@ -16,10 +16,6 @@ func ParseHeaderBlock(ctx context.Context, ax axiom.Context, input *gen.ParseHea
 	if input == nil {
 		return &gen.ParseHeaderBlockOutput{Error: "data is required"}, nil
 	}
-	if len(input.Data) > maxInputBytes {
-		return &gen.ParseHeaderBlockOutput{Error: "input exceeds the 4 MiB size limit"}, nil
-	}
-
 	hs, err := scanOrderedHeaders(input.Data)
 	if err != nil {
 		return &gen.ParseHeaderBlockOutput{Error: err.Error()}, nil

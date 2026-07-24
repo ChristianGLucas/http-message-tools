@@ -2,6 +2,7 @@ package nodes_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	gen "christiangeorgelucas/http-message-tools/gen"
@@ -122,21 +123,33 @@ func TestParseRequest_EmptyDataRejected(t *testing.T) {
 	}
 }
 
-// TestParseRequest_OversizeRejected proves the input-size bound actually
-// fires rather than being aspirational.
-func TestParseRequest_OversizeRejected(t *testing.T) {
+// TestParseRequest_LargeInputParses proves this node imposes no self-sized
+// total-input cap: a well-formed request whose raw bytes exceed the old
+// 4 MiB package-level reject threshold must still parse (not be rejected
+// outright with a "size limit" error). Payload-size limiting is the Axiom
+// platform's job (ingress, transport, sandboxed execution), not this
+// node's — so no input length, however large, should trigger got.Ok=false
+// here. (The body itself may still come back BodyTruncated=true: that's the
+// unrelated, still-present default max-body-read behavior, not a rejection.)
+func TestParseRequest_LargeInputParses(t *testing.T) {
 	ctx := context.Background()
 	ax := newTestContext(t)
-	huge := make([]byte, (4<<20)+1)
-	for i := range huge {
-		huge[i] = 'a'
+	body := make([]byte, (4<<20)+1024) // > the old 4 MiB total-input bound
+	for i := range body {
+		body[i] = 'a'
 	}
+	raw := []byte("POST /upload HTTP/1.1\r\nHost: a\r\nContent-Length: " +
+		strconv.Itoa(len(body)) + "\r\n\r\n")
+	raw = append(raw, body...)
 
-	got, err := nodes.ParseRequest(ctx, ax, &gen.ParseRequestInput{Data: huge})
+	got, err := nodes.ParseRequest(ctx, ax, &gen.ParseRequestInput{Data: raw})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.Ok {
-		t.Fatalf("expected ok=false for oversized input")
+	if !got.Ok {
+		t.Fatalf("expected ok=true for a large but well-formed request, got error %q", got.Error)
+	}
+	if got.Method != "POST" || got.Target != "/upload" {
+		t.Errorf("got Method=%q Target=%q, want POST /upload", got.Method, got.Target)
 	}
 }

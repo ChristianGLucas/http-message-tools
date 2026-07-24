@@ -21,10 +21,6 @@ func ParseMessage(ctx context.Context, ax axiom.Context, input *gen.ParseMessage
 	if input == nil || len(input.Data) == 0 {
 		return &gen.ParseMessageOutput{Error: "data is required"}, nil
 	}
-	if len(input.Data) > maxInputBytes {
-		return &gen.ParseMessageOutput{Error: "input exceeds the 4 MiB size limit"}, nil
-	}
-
 	startLine, rest, ok := splitStartLine(input.Data)
 	if !ok {
 		return &gen.ParseMessageOutput{Error: "no line terminator found; not a valid HTTP message"}, nil

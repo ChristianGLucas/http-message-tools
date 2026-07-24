@@ -19,9 +19,6 @@ func ParseRequestLine(ctx context.Context, ax axiom.Context, input *gen.ParseReq
 	if input == nil || input.Line == "" {
 		return &gen.ParseRequestLineOutput{Error: "line is required"}, nil
 	}
-	if len(input.Line) > maxLineBytes {
-		return &gen.ParseRequestLineOutput{Error: "line exceeds the 8192 byte limit"}, nil
-	}
 	if strings.ContainsAny(input.Line, "\r\n") {
 		return &gen.ParseRequestLineOutput{Error: "line must not contain embedded newlines"}, nil
 	}

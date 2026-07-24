@@ -16,10 +16,6 @@ func SplitRequestTarget(ctx context.Context, ax axiom.Context, input *gen.SplitR
 	if input == nil || input.Target == "" {
 		return &gen.SplitRequestTargetOutput{Error: "target is required"}, nil
 	}
-	if len(input.Target) > maxLineBytes {
-		return &gen.SplitRequestTargetOutput{Error: "target exceeds the 8192 byte limit"}, nil
-	}
-
 	path, query, _ := strings.Cut(input.Target, "?")
 	return &gen.SplitRequestTargetOutput{Ok: true, Path: path, Query: query}, nil
 }

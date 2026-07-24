@@ -19,9 +19,6 @@ func ParseStatusLine(ctx context.Context, ax axiom.Context, input *gen.ParseStat
 	if input == nil || input.Line == "" {
 		return &gen.ParseStatusLineOutput{Error: "line is required"}, nil
 	}
-	if len(input.Line) > maxLineBytes {
-		return &gen.ParseStatusLineOutput{Error: "line exceeds the 8192 byte limit"}, nil
-	}
 	if strings.ContainsAny(input.Line, "\r\n") {
 		return &gen.ParseStatusLineOutput{Error: "line must not contain embedded newlines"}, nil
 	}

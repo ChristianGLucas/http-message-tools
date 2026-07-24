@@ -20,9 +20,6 @@ func DechunkBody(ctx context.Context, ax axiom.Context, input *gen.DechunkBodyIn
 	if input == nil || len(input.Data) == 0 {
 		return &gen.DechunkBodyOutput{Error: "data is required"}, nil
 	}
-	if len(input.Data) > maxInputBytes {
-		return &gen.DechunkBodyOutput{Error: "input exceeds the 4 MiB size limit"}, nil
-	}
 
 	cr := httputil.NewChunkedReader(bytes.NewReader(input.Data))
 	out, truncated, err := readBodyBounded(cr, clampMaxOutput(input.MaxOutputBytes))
