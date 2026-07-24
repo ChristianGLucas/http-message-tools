@@ -35,7 +35,7 @@ message HttpHeader {
 message ParseRequestInput {
   bytes data = 1;
   // Optional cap on the decoded body size in bytes. 0 (default) uses the
-  // package default of 4 MiB.
+  // package default of 4 MiB, which is also the hard input-size ceiling.
   int32 max_body_bytes = 2;
 }
 
